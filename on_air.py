@@ -9,6 +9,7 @@ import time
 from typing import Any, Callable, Dict, List
 
 import regex
+from google.auth import jwt
 from google.cloud import pubsub_v1
 
 _log = logging.getLogger(__file__)
@@ -101,10 +102,22 @@ def main() -> None:
         required=True,
         help="Google topic to publish messages to",
     )
+    arg(
+        "--google-credential",
+        type=str,
+        required=True,
+        help="Google credential JWT file",
+    )
     args = parser.parse_args()
 
-    publisher = pubsub_v1.PublisherClient()
+    service_account_info = json.load(open(args.google_credential))
+    audience = "https://pubsub.googleapis.com/google.pubsub.v1.Publisher"
+    credentials = jwt.Credentials.from_service_account_info(
+        service_account_info, audience=audience
+    )
+    publisher = pubsub_v1.PublisherClient(credentials=credentials)
     topic_name = f"projects/{args.google_project_id}/topics/{args.google_topic}"
+    # TODO create as a separate subcommand
     # publisher.create_topic(topic_name)
 
     def publish_message(message: Dict[str, Any]) -> None:
