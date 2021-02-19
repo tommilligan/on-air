@@ -1,4 +1,5 @@
-/run
+/listen
+/stream
 *.pyc
 __pycache__
 *.json
