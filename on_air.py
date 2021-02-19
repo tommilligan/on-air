@@ -69,7 +69,12 @@ def poll_av_and_publish(
 
     # This will loop forever, so set a nice shutdown handler
     signal.signal(signal.SIGINT, shutdown)
+
+    last_payload: Optional[Payload] = None
+
+    _log.info("Watching for changes in local audio/video state")
     while True:
+        _log.debug("Polling local audio/video state")
         audio_owners = lsof("/dev/snd/pcmC*")
         video_owners = lsof("/dev/video*")
 
@@ -77,7 +82,10 @@ def poll_av_and_publish(
             "audio": len(audio_owners) > 0,
             "video": len(video_owners) > 0,
         }
-        publish_payload(payload)
+
+        if payload != last_payload:
+            last_payload = payload
+            publish_payload(payload)
 
         time.sleep(poll_interval)
 
@@ -89,7 +97,7 @@ def run_stream(args: argparse.Namespace) -> None:
         service_account_info, audience=audience
     )
     publisher = pubsub.PublisherClient(credentials=credentials)
-    topic_name = f"projects/{args.google_project_id}/topics/{args.google_topic}"
+    topic_name = f"projects/{args.google_project_id}/topics/{args.topic_name}"
 
     def publish_payload(payload: Dict[str, bool]) -> None:
         data = json.dumps(payload)
@@ -131,7 +139,7 @@ class DisplayState:
             self._device.off()
 
     def _solid(self, color: Rgb) -> None:
-        _log.info("Color set: '%s'", color)
+        _log.debug("Color set: '%s'", color)
         if self._device:
             self._device.fade_to_rgb(0, *color)
 
@@ -167,7 +175,7 @@ class DisplayState:
         self._solid(color)
 
 
-_DEFAULT_MESSAGE = {"audio": False, "video": False}
+_DEFAULT_PAYLOAD = {"audio": False, "video": False}
 
 
 def run_listen(args: argparse.Namespace) -> None:
@@ -178,7 +186,7 @@ def run_listen(args: argparse.Namespace) -> None:
     )
     subscriber = pubsub.SubscriberClient(credentials=credentials)
     subscription_name = (
-        f"projects/{args.google_project_id}/subscriptions/{args.google_subscription}"
+        f"projects/{args.google_project_id}/subscriptions/{args.subscription_name}"
     )
 
     if args.blink1:
@@ -187,7 +195,7 @@ def run_listen(args: argparse.Namespace) -> None:
     else:
         device = None
 
-    with DisplayState(device, _DEFAULT_MESSAGE) as display_state:
+    with DisplayState(device, _DEFAULT_PAYLOAD) as display_state:
 
         def recieve_message(message):
             payload = message.data.decode("utf-8")
@@ -199,6 +207,8 @@ def run_listen(args: argparse.Namespace) -> None:
 
         # This will loop forever, so set a nice shutdown handler
         signal.signal(signal.SIGINT, shutdown)
+
+        _log.info("Listening for published updates")
         future = subscriber.subscribe(subscription_name, recieve_message)
         future.result()
 
@@ -223,16 +233,10 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="API Gateway Service")
     parser.add_argument(
-        "--poll-interval",
-        type=int,
-        required=True,
-        help="Interval to check local state in seconds",
-    )
-    parser.add_argument(
         "--google-project-id",
         type=str,
         required=True,
-        help="Google project id to publish messages to",
+        help="Google project id to use",
     )
     parser.add_argument(
         "--google-credential",
@@ -245,16 +249,22 @@ def main() -> None:
     stream = subparsers.add_parser("stream")
     stream.set_defaults(execute=run_stream)
     stream.add_argument(
-        "--google-topic",
+        "--poll-interval",
+        type=int,
+        required=True,
+        help="Interval to check local state in seconds",
+    )
+    stream.add_argument(
+        "--topic-name",
         type=str,
         required=True,
-        help="Google topic to publish messages to",
+        help="Topic to publish messages to",
     )
 
     listen = subparsers.add_parser("listen")
     listen.set_defaults(execute=run_listen)
     listen.add_argument(
-        "--google-subscription",
+        "--subscription-name",
         type=str,
         required=True,
         help="Google subscription to recieve messages from",
