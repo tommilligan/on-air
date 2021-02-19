@@ -8,10 +8,10 @@ Display a warning light when a user is **on-air** (live audio/video), using [Goo
 
 You will need to create a [Google Cloud Pub/Sub](https://cloud.google.com/pubsub) resource to act as a message queue.
 
-You will also need to provision two service accounts:
+You will also need to provision a service accounts for each device in the system:
 
-- a publisher, to write events
-- a subscriber, to read events
+- one or more publisher credentials, to write events
+- one subscriber credential, to read events
 
 This is currently outside the scope of this readme.
 
@@ -28,7 +28,7 @@ cd on-air
 pip install -r requirements.txt
 ```
 
-On the device with hardware to monitor, start streaming events up to the cloud:
+On devices with hardware to monitor, start streaming events up to the cloud:
 
 ```bash
 # The variables you will need to fill in from your GCP project
@@ -63,7 +63,7 @@ SUBSCRIPTION_NAME=subscription-name
 
 ## Architecture
 
-The architecture used is a single-publisher single-consumer pub/sub flow:
+The architecture used is a multiple-publisher single-consumer pub/sub flow:
 
 ```
                  +----------------+
@@ -91,7 +91,7 @@ Changes to hardware usage on the publisher device are polled for using [`lsof`](
 When a change is detected, a message is published to a topic in [Google Cloud Pub/Sub](https://cloud.google.com/pubsub).
 
 A subscriber interested in changes listens for messages on a linked topic using a [`google` gRPC streaming client](https://github.com/googleapis/python-pubsub).
-On recieving a message, any relevant user notification is calculated and pushed to the [blink(1)](https://blink1.thingm.com/) indicator.
+On recieving a message, the subscriber caches messages by source. It then computes an additive state for all publishers, and triggers a user notification via the [blink(1)](https://blink1.thingm.com/) indicator if applicable.
 
 ## Requirements
 
@@ -106,6 +106,7 @@ On recieving a message, any relevant user notification is calculated and pushed 
 
 ## TODO List
 
+- [x] Support multiple publisher to single subscriber flow
 - [ ] Servicify clients using something like a `systemd` service
 - [ ] One click/commandi install of python clients
 - [ ] Better instructions/automated setup of GCP resources

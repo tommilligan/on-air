@@ -5,17 +5,20 @@ import glob
 import json
 import logging
 import signal
+import socket
 import subprocess
 import sys
 import time
-from typing import Callable, Dict, List, Optional, Tuple
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Tuple
 
 import regex
 from blink1.blink1 import Blink1
 from google.auth import jwt
 from google.cloud import pubsub
 
-Payload = Dict[str, bool]
+Payload = Dict[str, Any]
 
 _log = logging.getLogger(__file__)
 
@@ -64,7 +67,9 @@ def lsof(pattern: str) -> List[str]:
 
 
 def poll_av_and_publish(
-    poll_interval: int, publish_payload: Callable[[Dict[str, bool]], None]
+    poll_interval: int,
+    publish_payload: Callable[[Payload], None],
+    source_name: str,
 ) -> None:
 
     # This will loop forever, so set a nice shutdown handler
@@ -81,6 +86,7 @@ def poll_av_and_publish(
         payload = {
             "audio": len(audio_owners) > 0,
             "video": len(video_owners) > 0,
+            "source": source_name,
         }
 
         if payload != last_payload:
@@ -99,14 +105,16 @@ def run_stream(args: argparse.Namespace) -> None:
     publisher = pubsub.PublisherClient(credentials=credentials)
     topic_name = f"projects/{args.google_project_id}/topics/{args.topic_name}"
 
-    def publish_payload(payload: Dict[str, bool]) -> None:
+    def publish_payload(payload: Payload) -> None:
         data = json.dumps(payload)
         _log.info("Publishing message: '%s'", data)
         future = publisher.publish(topic_name, data.encode("utf-8"))
         future.result()
 
     poll_av_and_publish(
-        poll_interval=args.poll_interval, publish_payload=publish_payload
+        poll_interval=args.poll_interval,
+        publish_payload=publish_payload,
+        source_name=args.source_name,
     )
 
 
@@ -123,13 +131,39 @@ _RGB_CLEAR = (0, 255, 0)
 _RGB_OFF = (0, 0, 0)
 
 
+_HARDWARE_KEYS = ("audio", "video")
+
+
+@dataclass(eq=True, frozen=True)
+class ComputedState:
+    audio: bool
+    video: bool
+
+    @staticmethod
+    def from_source_states(source_states: Iterable[Payload]) -> "ComputedState":
+        audio = False
+        video = False
+
+        for state in source_states:
+            if state["audio"]:
+                audio = True
+            if state["video"]:
+                video = True
+
+        return ComputedState(audio=audio, video=video)
+
+
 class DisplayState:
     _device: Optional[Blink1]
-    _last_payload: Dict[str, bool]
+    # Map of {source name -> Payload}
+    _source_states: DefaultDict[str, Payload]
+    # Computed hash over all source states
+    _state: ComputedState
 
-    def __init__(self, device, last_payload: Payload):
+    def __init__(self, device):
         self._device = device
-        self._last_payload = last_payload
+        self._source_states = defaultdict(dict)
+        self._state = ComputedState(audio=False, video=False)
 
     def __enter__(self, *args):
         return self
@@ -150,17 +184,26 @@ class DisplayState:
             self._solid(_RGB_OFF)
             time.sleep(_BLINK_DURATION)
 
-    def update(self, payload: Dict[str, bool]) -> None:
-        if payload == self._last_payload:
+    def update(self, payload: Payload) -> None:
+        source_name = payload["source"]
+        previous_source_state = self._source_states[source_name]
+        if previous_source_state == payload:
+            _log.debug("Source state is unchanged: '%s'", payload)
             return
+        self._source_states[source_name] = payload
 
-        self._last_payload = payload
+        state = ComputedState.from_source_states(self._source_states.values())
+        if self._state == state:
+            _log.debug("Computed state is unchanged: '%s'", state)
+            return
+        self._state = state
+        _log.debug("Computed state updated: '%s'", state)
 
-        if payload["audio"] and payload["video"]:
+        if state.audio and state.video:
             color = _RGB_AUDIO_VIDEO
-        elif payload["audio"]:
+        elif state.audio:
             color = _RGB_AUDIO
-        elif payload["video"]:
+        elif state.video:
             color = _RGB_VIDEO
         else:
             # Once wer're clear, flash an all clear, then turn off
@@ -175,9 +218,6 @@ class DisplayState:
         self._solid(color)
 
 
-_DEFAULT_PAYLOAD = {"audio": False, "video": False}
-
-
 def run_listen(args: argparse.Namespace) -> None:
     service_account_info = json.load(open(args.google_credential))
     audience = "https://pubsub.googleapis.com/google.pubsub.v1.Subscriber"
@@ -189,13 +229,13 @@ def run_listen(args: argparse.Namespace) -> None:
         f"projects/{args.google_project_id}/subscriptions/{args.subscription_name}"
     )
 
-    if args.blink1:
+    if args.no_blink1:
+        device = None
+    else:
         device = Blink1()
         device.off()
-    else:
-        device = None
 
-    with DisplayState(device, _DEFAULT_PAYLOAD) as display_state:
+    with DisplayState(device) as display_state:
 
         def recieve_message(message):
             payload = message.data.decode("utf-8")
@@ -260,6 +300,12 @@ def main() -> None:
         required=True,
         help="Topic to publish messages to",
     )
+    stream.add_argument(
+        "--source-name",
+        type=str,
+        default=socket.gethostname(),
+        help="Specify the name of this source of events. Defaults to system hostname.",
+    )
 
     listen = subparsers.add_parser("listen")
     listen.set_defaults(execute=run_listen)
@@ -270,9 +316,9 @@ def main() -> None:
         help="Google subscription to recieve messages from",
     )
     listen.add_argument(
-        "--blink1",
+        "--no-blink1",
         action="store_true",
-        help="Use blink(1) to signal listened output",
+        help="Do not use blink(1) for user notifications",
     )
 
     args = parser.parse_args()
