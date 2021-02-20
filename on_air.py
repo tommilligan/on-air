@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Tuple
 
-import regex
+import re
 from blink1.blink1 import Blink1
 from google.auth import jwt
 from google.cloud import pubsub
@@ -23,7 +23,7 @@ Payload = Dict[str, Any]
 
 _log = logging.getLogger(__file__)
 
-_LSOF_KNOWN_ERRORS = regex.compile(
+_LSOF_KNOWN_ERRORS = re.compile(
     r"(?:Output information may be incomplete\.|WARNING: can't stat\(\) .* file system)"
 )
 
@@ -266,8 +266,7 @@ def run_listen(args: argparse.Namespace) -> None:
 def shutdown(signal_number, frame):
     """Shutdown handler for system signals."""
     _log.info(
-        "Received signal '%s (%s)', shutting down",
-        signal.strsignal(signal_number),
+        "Received signal '%s', shutting down",
         signal_number,
     )
     sys.exit(1)

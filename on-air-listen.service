@@ -1,0 +1,17 @@
+# systemd service for on-air listener
+
+[Unit]
+Description=on-air warning light listener
+After=network.target
+
+[Service]
+ExecStart=/home/pi/on-air/env/bin/python3 /home/pi/on-air/on_air.py --google-project-id google-project-012345 --google-credential /home/pi/on-air/google-credential.json listen --subscription-name subscription-name
+WorkingDirectory=/home/pi/on-air
+StandardOutput=null
+StandardError=append:/home/pi/on-air/on-air.log
+Restart=always
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target

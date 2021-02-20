@@ -1,0 +1,17 @@
+# systemd service for on-air streamer
+
+[Unit]
+Description=on-air warning light streamer
+After=network.target
+
+[Service]
+ExecStart=/home/tom/on-air/env/bin/python3 /home/tom/on-air/on_air.py --google-project-id google-project-012345 --google-credential /home/tom/on-air/google-credential.json stream --poll-interval 5 --topic-name topic-name
+WorkingDirectory=/home/tom/on-air
+StandardOutput=null
+StandardError=append:/home/tom/on-air/on-air.log
+Restart=always
+User=tom
+Group=tom
+
+[Install]
+WantedBy=multi-user.target

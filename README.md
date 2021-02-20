@@ -70,6 +70,39 @@ sudo cp 51-blink1.rules /etc/udev/rules.d/
 sudo udevadm control --reload
 ```
 
+## Raspberry Pi Further Setup
+
+Some additional steps and dependencies are needed for Raspberry Pi:
+
+```bash
+sudo apt-get install  \
+  python3-venv
+cd ~
+mkdir on-air
+cd on-air
+python3 -m venv env
+```
+
+### Systemd Services
+
+Example service files are included for both listener (rpi) and streamer.
+
+### Log rotation
+
+You should set up log rotation like:
+
+```conf
+# /etc/logrotate.d/on-air-listen
+
+/home/pi/on-air/on-air.log {
+  daily
+  missingok
+  rotate 4
+  compress
+  copytruncate
+}
+```
+
 ## Architecture
 
 The architecture used is a multiple-publisher single-consumer pub/sub flow:
