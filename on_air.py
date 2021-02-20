@@ -124,9 +124,8 @@ _BLINK_DURATION = 0.1
 _BLINK_REPEAT = 3
 
 Rgb = Tuple[int, int, int]
-_RGB_AUDIO_VIDEO = (255, 0, 0)
-_RGB_VIDEO = (255, 182, 0)
-_RGB_AUDIO = (255, 255, 0)
+_RGB_VIDEO = (255, 0, 0)
+_RGB_AUDIO = (0, 0, 255)
 _RGB_CLEAR = (0, 255, 0)
 _RGB_OFF = (0, 0, 0)
 
@@ -199,18 +198,14 @@ class DisplayState:
         self._state = state
         _log.debug("Computed state updated: '%s'", state)
 
-        if state.audio and state.video:
-            color = _RGB_AUDIO_VIDEO
+        if state.video:
+            color = _RGB_VIDEO
         elif state.audio:
             color = _RGB_AUDIO
-        elif state.video:
-            color = _RGB_VIDEO
         else:
             # Once wer're clear, flash an all clear, then turn off
             color = _RGB_CLEAR
             self._blink(color)
-            self._solid(color)
-            time.sleep(3)
             self._solid(_RGB_OFF)
             return
 

@@ -61,6 +61,15 @@ SUBSCRIPTION_NAME=subscription-name
   --subscription-name "$SUBSCRIPTION_NAME"
 ```
 
+## blink1 setup
+
+For a linux machine, you will need to add udev rules for the device. A copy is in this repo:
+
+```bash
+sudo cp 51-blink1.rules /etc/udev/rules.d/
+sudo udevadm control --reload
+```
+
 ## Architecture
 
 The architecture used is a multiple-publisher single-consumer pub/sub flow:
