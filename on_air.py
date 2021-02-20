@@ -11,6 +11,7 @@ import sys
 import time
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Tuple
 
 import regex
@@ -36,9 +37,7 @@ class SystemError(OnAirError):
 
 
 def lsof(pattern: str) -> List[str]:
-    """
-    List file owners owners for the specified glob pattern.
-    """
+    """List file owner PIDs for the given glob pattern."""
     files = glob.glob(pattern)
     response = subprocess.run(
         ["/usr/bin/lsof", "-t"] + files,
@@ -71,6 +70,7 @@ def poll_av_and_publish(
     publish_payload: Callable[[Payload], None],
     source_name: str,
 ) -> None:
+    """Poll local audio/video hardware in a loop, and publish update messages."""
 
     # This will loop forever, so set a nice shutdown handler
     signal.signal(signal.SIGINT, shutdown)
@@ -97,6 +97,7 @@ def poll_av_and_publish(
 
 
 def run_stream(args: argparse.Namespace) -> None:
+    """Entrypoint for the streaming client."""
     service_account_info = json.load(open(args.google_credential))
     audience = "https://pubsub.googleapis.com/google.pubsub.v1.Publisher"
     credentials = jwt.Credentials.from_service_account_info(
@@ -213,7 +214,11 @@ class DisplayState:
         self._solid(color)
 
 
+_LISTEN_SKEW = timedelta(minutes=1)
+
+
 def run_listen(args: argparse.Namespace) -> None:
+    """Entrypoint for the listening client."""
     service_account_info = json.load(open(args.google_credential))
     audience = "https://pubsub.googleapis.com/google.pubsub.v1.Subscriber"
     credentials = jwt.Credentials.from_service_account_info(
@@ -232,7 +237,17 @@ def run_listen(args: argparse.Namespace) -> None:
 
     with DisplayState(device) as display_state:
 
-        def recieve_message(message):
+        def recieve_message(message) -> None:
+            now = datetime.now(tz=timezone.utc)
+            if message.publish_time < (now - _LISTEN_SKEW):
+                _log.debug(
+                    "Discarding skewed message: now '%s', message '%s'",
+                    now,
+                    message.publish_time,
+                )
+                message.ack()
+                return
+
             payload = message.data.decode("utf-8")
             _log.info("Recieved message: %s", payload)
             data = json.loads(payload)
@@ -249,6 +264,7 @@ def run_listen(args: argparse.Namespace) -> None:
 
 
 def shutdown(signal_number, frame):
+    """Shutdown handler for system signals."""
     _log.info(
         "Received signal '%s (%s)', shutting down",
         signal.strsignal(signal_number),
@@ -258,6 +274,7 @@ def shutdown(signal_number, frame):
 
 
 def main() -> None:
+    """Main command line entrypoint."""
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     stream_handler = logging.StreamHandler()
