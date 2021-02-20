@@ -1,6 +1,6 @@
 # on-air
 
-Show a warning light when a someone in the room is **on-air**, using [Google Cloud Pub/Sub](https://cloud.google.com/pubsub) and [blink(1)](https://blink1.thingm.com/).
+Show a warning light when someone in the room is **on-air**, using [Google Cloud Pub/Sub](https://cloud.google.com/pubsub) and [blink(1)](https://blink1.thingm.com/).
 
 ## Getting started
 
