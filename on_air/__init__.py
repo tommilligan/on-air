@@ -27,6 +27,9 @@ _LSOF_KNOWN_ERRORS = re.compile(
     r"(?:Output information may be incomplete\.|WARNING: can't stat\(\) .* file system)"
 )
 
+_GLOB_AUDIO_DEVICES = "/dev/snd/pcmC*D*c"
+_GLOB_VIDEO_DEVICES = "/dev/video*"
+
 
 class OnAirError(Exception):
     pass
@@ -80,8 +83,8 @@ def poll_av_and_publish(
     _log.info("Watching for changes in local audio/video state")
     while True:
         _log.debug("Polling local audio/video state")
-        audio_owners = lsof("/dev/snd/pcmC*")
-        video_owners = lsof("/dev/video*")
+        audio_owners = lsof(_GLOB_AUDIO_DEVICES)
+        video_owners = lsof(_GLOB_VIDEO_DEVICES)
 
         payload = {
             "audio": len(audio_owners) > 0,
