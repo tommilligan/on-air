@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -euxo pipefail
+
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-""}:$VIRTUAL_ENV/lib/python3.8/site-packages/hidapi.libs dpkg-buildpackage -us -uc -b

@@ -1,0 +1,12 @@
+[Unit]
+Description=on-air warning light streamer
+After=network.target
+
+[Service]
+ExecStart=/opt/venvs/on-air/bin/on-air --config /etc/on-air/on-air.json stream
+StandardOutput=null
+StandardError=append:/var/log/on-air.log
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

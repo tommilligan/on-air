@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+%:
+	dh $@ --with python-virtualenv
+
+# Avoid stripping libraries we need to use at runtime:
+# https://github.com/spotify/dh-virtualenv/issues/273#issuecomment-617415414
+override_dh_strip:
+	dh_strip \
+	  --exclude=hid
+	  # --exclude=libattr \
+	  # --exclude=libbz2 \
+	  # --exclude=libcap \
+	  # --exclude=libdw-0 \
+	  # --exclude=libelf-0 \
+	  # --exclude=liblzma \
+	  # --exclude=libudev \
+	  # --exclude=libusb \
+	  # --exclude=libz \
+
+override_dh_shlibdeps:
+	dh_shlibdeps \
+	  -X/hid/
+	  # -X/hidapi/ \
+	  # -X/hid.cpython/ \

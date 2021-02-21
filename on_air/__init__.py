@@ -4,6 +4,7 @@ import argparse
 import glob
 import json
 import logging
+import re
 import signal
 import socket
 import subprocess
@@ -14,7 +15,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Tuple
 
-import re
 from blink1.blink1 import Blink1
 from google.auth import jwt
 from google.cloud import pubsub
@@ -96,15 +96,77 @@ def poll_av_and_publish(
         time.sleep(poll_interval)
 
 
+@dataclass
+class Config:
+    google_credential: str
+    google_project_id: str
+    poll_interval: int
+    topic_name: str
+    source_name: str
+
+    @staticmethod
+    def from_args(args: argparse.Namespace) -> "Config":
+        google_credential = None
+        google_project_id = None
+        poll_interval = None
+        topic_name = None
+        source_name = None
+
+        if args.config:
+            with open(args.config, "r") as config_file:
+                raw_config_json = json.load(config_file)
+
+            google_credential = raw_config_json.get("google_credential")
+            google_project_id = raw_config_json.get("google_project_id")
+            poll_interval = raw_config_json.get("poll_interval")
+            topic_name = raw_config_json.get("topic_name")
+            source_name = raw_config_json.get("source_name")
+
+        if args.google_credential:
+            google_credential = args.google_credential
+        if args.google_project_id:
+            google_project_id = args.google_project_id
+        if args.poll_interval:
+            poll_interval = args.poll_interval
+        if args.topic_name:
+            topic_name = args.topic_name
+        if args.source_name:
+            source_name = args.source_name
+
+        if not source_name:
+            source_name = socket.gethostname()
+
+        if google_credential is None or not isinstance(google_credential, str):
+            raise ValueError(f"Invalid google_credential: '{google_credential}'")
+        if google_project_id is None or not isinstance(google_project_id, str):
+            raise ValueError(f"Invalid google_project_id: '{google_project_id}'")
+        if poll_interval is None or not isinstance(poll_interval, int):
+            raise ValueError(f"Invalid poll_interval: '{poll_interval}'")
+        if topic_name is None or not isinstance(topic_name, str):
+            raise ValueError(f"Invalid topic_name: '{topic_name}'")
+        if source_name is None or not isinstance(source_name, str):
+            raise ValueError(f"Invalid source_name: '{source_name}'")
+
+        return Config(
+            google_credential=google_credential,
+            google_project_id=google_project_id,
+            poll_interval=poll_interval,
+            topic_name=topic_name,
+            source_name=source_name,
+        )
+
+
 def run_stream(args: argparse.Namespace) -> None:
     """Entrypoint for the streaming client."""
-    service_account_info = json.load(open(args.google_credential))
+    config = Config.from_args(args)
+
+    service_account_info = json.load(open(config.google_credential))
     audience = "https://pubsub.googleapis.com/google.pubsub.v1.Publisher"
     credentials = jwt.Credentials.from_service_account_info(
         service_account_info, audience=audience
     )
     publisher = pubsub.PublisherClient(credentials=credentials)
-    topic_name = f"projects/{args.google_project_id}/topics/{args.topic_name}"
+    topic_name = f"projects/{config.google_project_id}/topics/{config.topic_name}"
 
     def publish_payload(payload: Payload) -> None:
         data = json.dumps(payload)
@@ -113,9 +175,9 @@ def run_stream(args: argparse.Namespace) -> None:
         future.result()
 
     poll_av_and_publish(
-        poll_interval=args.poll_interval,
+        poll_interval=config.poll_interval,
         publish_payload=publish_payload,
-        source_name=args.source_name,
+        source_name=config.source_name,
     )
 
 
@@ -127,7 +189,6 @@ _BLINK_REPEAT = 3
 Rgb = Tuple[int, int, int]
 _RGB_VIDEO = (255, 0, 0)
 _RGB_AUDIO = (0, 0, 255)
-_RGB_CLEAR = (0, 255, 0)
 _RGB_OFF = (0, 0, 0)
 
 
@@ -159,11 +220,14 @@ class DisplayState:
     _source_states: DefaultDict[str, Payload]
     # Computed hash over all source states
     _state: ComputedState
+    # Last color to display
+    _last_color: Rgb
 
     def __init__(self, device):
         self._device = device
         self._source_states = defaultdict(dict)
         self._state = ComputedState(audio=False, video=False)
+        self._last_color = _RGB_OFF
 
     def __enter__(self, *args):
         return self
@@ -178,10 +242,11 @@ class DisplayState:
             self._device.fade_to_rgb(0, *color)
 
     def _blink(self, color: Rgb) -> None:
+        """Blink the given new color, alternating back to the current color."""
         for _ in range(0, _BLINK_REPEAT):
             self._solid(color)
             time.sleep(_BLINK_DURATION)
-            self._solid(_RGB_OFF)
+            self._solid(self._last_color)
             time.sleep(_BLINK_DURATION)
 
     def update(self, payload: Payload) -> None:
@@ -204,14 +269,11 @@ class DisplayState:
         elif state.audio:
             color = _RGB_AUDIO
         else:
-            # Once wer're clear, flash an all clear, then turn off
-            color = _RGB_CLEAR
-            self._blink(color)
-            self._solid(_RGB_OFF)
-            return
+            color = _RGB_OFF
 
         self._blink(color)
         self._solid(color)
+        self._last_color = color
 
 
 _LISTEN_SKEW = timedelta(minutes=1)
@@ -282,39 +344,39 @@ def main() -> None:
     )
     root_logger.handlers = [stream_handler]
 
-    parser = argparse.ArgumentParser(description="API Gateway Service")
+    parser = argparse.ArgumentParser(description="on-air warning light")
     parser.add_argument(
         "--google-project-id",
         type=str,
-        required=True,
         help="Google project id to use",
     )
     parser.add_argument(
         "--google-credential",
         type=str,
-        required=True,
         help="Google credential JWT file",
     )
 
     subparsers = parser.add_subparsers(required=True, dest="subcommand")
     stream = subparsers.add_parser("stream")
     stream.set_defaults(execute=run_stream)
+    parser.add_argument(
+        "--config",
+        type=str,
+        help="Config file to use. Does not load a config file by default",
+    )
     stream.add_argument(
         "--poll-interval",
         type=int,
-        required=True,
         help="Interval to check local state in seconds",
     )
     stream.add_argument(
         "--topic-name",
         type=str,
-        required=True,
         help="Topic to publish messages to",
     )
     stream.add_argument(
         "--source-name",
         type=str,
-        default=socket.gethostname(),
         help="Specify the name of this source of events. Defaults to system hostname.",
     )
 
@@ -323,7 +385,6 @@ def main() -> None:
     listen.add_argument(
         "--subscription-name",
         type=str,
-        required=True,
         help="Google subscription to recieve messages from",
     )
     listen.add_argument(

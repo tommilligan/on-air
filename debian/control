@@ -1,0 +1,13 @@
+Source: on-air
+Maintainer: Tom Milligan <code@tommilligan.net>
+Section: misc
+Priority: optional
+Standards-Version: 3.9.5
+Build-Depends: debhelper (>= 9), dh-virtualenv (>= 0.8), python3
+
+Package: on-air
+Architecture: any
+Pre-Depends: dpkg (>= 1.16.1), python3, ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: on-air room notification
+ Show a warning light wen someone in the room is on-air.

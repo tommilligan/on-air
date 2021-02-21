@@ -1,0 +1,7 @@
+/var/log/on-air.log {
+  daily
+  missingok
+  rotate 4
+  compress
+  copytruncate
+}

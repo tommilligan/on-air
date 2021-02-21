@@ -146,10 +146,31 @@ On recieving a message, the subscriber caches messages by source. It then comput
 - Fail open: if state is unknown, default to indicator off
   - On subscriber crash or restart, the indicator is reset
 
+## Configuration
+
+For a streamer the easiest installation is to install the debian package. This will automatically install a service daemon to stream events in the background.
+
+Additional configuration is required for this method:
+
+- Create a system directory for configuration: `sudo mkdir /etc/on-air`
+- Move your GCP JWT credential here: `sudo mv google-credential.json /etc/on-air/google-credential.json`
+- Set up a config file at `/etc/on-air/on-air.json`. Example contents:
+
+```json
+{
+  "google_project_id": "google-project-012345",
+  "google_credential": "/etc/on-air/google-credential.json",
+  "hardware_poll_interval": 5,
+  "topic_name": "topic-name"
+}
+```
+
 ## TODO List
 
 - [x] Support multiple publisher to single subscriber flow
-- [ ] Servicify clients using something like a `systemd` service
-- [ ] One click/commandi install of python clients
+- [x] Servicify clients using something like a `systemd` service
+- [x] One click/command install of python clients
 - [ ] Better instructions/automated setup of GCP resources
+  - [ ] Subscribers create their own subscription topic
 - [ ] Configurable notification settings (color/blink count)
+  - [x] Load settings from config file

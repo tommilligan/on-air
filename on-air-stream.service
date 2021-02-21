@@ -10,8 +10,6 @@ WorkingDirectory=/home/tom/on-air
 StandardOutput=null
 StandardError=append:/home/tom/on-air/on-air.log
 Restart=always
-User=tom
-Group=tom
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -euxo pipefail
+
+
+# Other build dependencies
+sudo apt-get install build-essential debhelper devscripts equivs
+
+# Install the dh-virtualenv package
+sudo apt-get install libjs-sphinxdoc sphinx-rtd-theme-common
+git clone https://github.com/spotify/dh-virtualenv
+cd dh-virtualenv
+docker build --tag dh-venv-builder --build-arg distro=ubuntu:focal .
+rm -rf dist && mkdir -p dist && docker run --rm dh-venv-builder tar -C /dpkg -c . | tar -C dist -xv
+sudo dpkg -i dist/dh-virtualenv_*\~focal_all.deb

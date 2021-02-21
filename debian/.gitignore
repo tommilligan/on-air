@@ -1,0 +1,6 @@
+/debhelper-build-stamp
+/*.debhelper
+/on-air
+/files
+/*.substvars
+*.log
