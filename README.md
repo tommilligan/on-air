@@ -160,7 +160,7 @@ Additional configuration is required for this method:
 {
   "google_project_id": "google-project-012345",
   "google_credential": "/etc/on-air/google-credential.json",
-  "hardware_poll_interval": 5,
+  "poll_interval": 5,
   "topic_name": "topic-name"
 }
 ```
